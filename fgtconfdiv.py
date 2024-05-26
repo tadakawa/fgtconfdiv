@@ -1,64 +1,61 @@
-from __future__ import annotations
-
-import collections
-import tkinter
-import tkinter.filedialog as fd
+from tkinter.filedialog import askopenfilenames
 from pathlib import Path
 
 
-class Config(collections.UserList[str]):
-    @classmethod
-    def read(cls, file: Path | str) -> Config:
-        with Path(file).open() as f:
-            return cls(f.readlines())
+class Config:
+    option = dict(encoding="ascii", errors="surrogateescape")
 
-    def write(self, file: Path | str, from_: int, to_: int) -> None:
-        with Path(file).open("wt") as f:
-            f.writelines(self[from_:to_])
+    def __init__(self, fname):
+        self.file = Path(fname)
+        self.rows = self.file.read_text(**self.option).splitlines(keepends=True)
+
+    def write(self, section: str, from_: int, to: int):
+        output = self.file.with_name(f"{self.file.stem}_{section}.txt")
+        output.write_text("".join(self.rows[from_:to]), **self.option)
+
+    @property
+    def name(self):
+        return self.file.name
+
+    def __iter__(self):
+        return iter(self.rows)
 
 
 def main():
-    tkinter.Tk().withdraw()
-    title = "Fortigateのコンフィグファイルを選択してください"
-    ftypes = [("ログファイル", "*.conf;*.log")]
-    if not (
-        filenames := fd.askopenfilenames(title=title, filetypes=ftypes, initialdir=".")
-    ):
-        return
+    filenames = askopenfilenames(
+        title="Fortigateのコンフィグファイルを選択してください",
+        filetypes=[("config log file", "*.conf;*.log")],
+        initialdir=".",
+    )
 
-    for filename in filenames:
-        file = Path(filename)
-        print(f"==  {file.name}  ".ljust(79, "="))
-        data = Config.read(file)
+    for config in map(Config, filenames):
+        section = "header"
+        vdom = ""
+        nested = from_ = 0
 
-        nested = 0
-        start_idx = 0
-        name = vdom_name = ""
-
-        for idx, text in enumerate(data):
+        print(f"==  {config.name}  ".ljust(79, "="))
+        for index, text in enumerate(config):
             text = text.rstrip()
+
             if text in ["config vdom", "config global"]:
-                nested = 1
-                name = vdom_name = text
-                start_idx = idx
-            elif text.startswith(("edit ", "config")):
                 nested += 1
-                if nested == 2 and text.startswith("edit "):
-                    # 2階層目の "edit xxxx" は VDOM名として一時保存
-                    vdom_name = text[5:]
+                section = text
+                from_ = index
+            elif text.startswith("config "):
+                nested += 1
+            elif text.startswith("edit "):
+                nested += 1
+                vdom = text[5:]
             elif text in ["next", "end"]:
                 nested -= 1
-                if nested == 1 and text == "end":
-                    # "edit VDOM名" セクションが "end" で終わったら name を更新
-                    name = vdom_name
             elif text == "":
-                nested = 0
-                print(f"{name=:14}: from {start_idx + 1:6} to {idx + 1:6}")
-                if name:
-                    output_file = file.with_suffix("." + name + ".txt")
-                else:
-                    output_file = file.with_suffix(".txt")
-                data.write(output_file, start_idx, idx + 1)
+                # ファイル出力
+                if nested:
+                    nested = 0
+                    section = vdom
+                to = index + 1
+                print(f"{section=!r:16}: from {from_ + 1:7,} to {to:7,}")
+                config.write(section, from_, to)
 
 
 if __name__ == "__main__":
