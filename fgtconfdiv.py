@@ -10,6 +10,7 @@ class Config:
         self.rows = self.file.read_text(**self.option).splitlines(keepends=True)
 
     def write(self, section: str, from_: int, to: int):
+        print(f"{section=!r:16}: from {from_ + 1:7,} to {to:7,}")
         output = self.file.with_name(f"{self.file.stem}_{section}.txt")
         output.write_text("".join(self.rows[from_:to]), **self.option)
 
@@ -31,14 +32,18 @@ def main():
     for config in map(Config, filenames):
         section = "header"
         vdom = ""
-        nested = from_ = 0
+        nested = index = from_ = 0
 
         print(f"==  {config.name}  ".ljust(79, "="))
         for index, text in enumerate(config):
             text = text.rstrip()
 
             if text in ["config vdom", "config global"]:
-                nested += 1
+                if nested:
+                    config.write(vdom, from_, index)
+                else:
+                    config.write(section, from_, index)
+                nested = 1
                 section = text
                 from_ = index
             elif text.startswith("config "):
@@ -48,14 +53,11 @@ def main():
                 vdom = text[5:]
             elif text in ["next", "end"]:
                 nested -= 1
-            elif text == "":
-                # ファイル出力
-                if nested:
-                    nested = 0
-                    section = vdom
-                to = index + 1
-                print(f"{section=!r:16}: from {from_ + 1:7,} to {to:7,}")
-                config.write(section, from_, to)
+        # 最後のコンフィグを出力
+        if nested:
+            config.write(vdom, from_, index + 1)
+        else:
+            config.write(section, from_, index + 1)
 
 
 if __name__ == "__main__":
