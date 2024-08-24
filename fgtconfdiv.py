@@ -10,6 +10,8 @@ class Config:
         self.rows = self.file.read_text(**self.option).splitlines(keepends=True)
 
     def write(self, section: str, from_: int, to: int):
+        if to <= from_:
+            return
         print(f"{section=!r:16}: from {from_ + 1:7,} to {to:7,}")
         output = self.file.with_name(f"{self.file.stem}_{section}.txt")
         output.write_text("".join(self.rows[from_:to]), **self.option)
@@ -20,6 +22,9 @@ class Config:
 
     def __iter__(self):
         return iter(self.rows)
+
+    def __len__(self):
+        return len(self.rows)
 
 
 def main():
@@ -32,7 +37,7 @@ def main():
     for config in map(Config, filenames):
         section = "header"
         vdom = ""
-        nested = index = from_ = 0
+        nested = from_ = 0
 
         print(f"==  {config.name}  ".ljust(79, "="))
         for index, text in enumerate(config):
@@ -53,11 +58,11 @@ def main():
                 vdom = text[5:]
             elif text in ["next", "end"]:
                 nested -= 1
-        # 最後のコンフィグを出力
+        # 未出力のコンフィグを出力
         if nested:
-            config.write(vdom, from_, index + 1)
+            config.write(vdom, from_, len(config))
         else:
-            config.write(section, from_, index + 1)
+            config.write(section, from_, len(config))
 
 
 if __name__ == "__main__":
